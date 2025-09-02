@@ -1,7 +1,8 @@
 using System.Buffers;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
 
-namespace FusionCacheTests.Stuff;
+namespace ZiggyCreatures.FusionCache.Tests.Stuff;
 
 #if NET9_0_OR_GREATER
 /// <summary>
@@ -12,7 +13,13 @@ internal class MockBufferDistributedCache : IBufferDistributedCache
 {
 	private readonly IDistributedCache _innerCache;
 	
-	public bool BufferMethodsUsed { get; private set; }
+	public bool BufferSetCalled { get; private set; }
+	public bool BufferGetCalled { get; private set; }
+
+	public MockBufferDistributedCache()
+	{
+		_innerCache = new MemoryDistributedCache(new MemoryCache(new MemoryCacheOptions()));
+	}
 
 	public MockBufferDistributedCache(IDistributedCache innerCache)
 	{
@@ -44,7 +51,7 @@ internal class MockBufferDistributedCache : IBufferDistributedCache
 	// IBufferDistributedCache methods (track usage and convert to byte[])
 	public bool TryGet(string key, IBufferWriter<byte> destination)
 	{
-		BufferMethodsUsed = true;
+		BufferGetCalled = true;
 		var data = _innerCache.Get(key);
 		if (data != null)
 		{
@@ -56,7 +63,7 @@ internal class MockBufferDistributedCache : IBufferDistributedCache
 
 	public async ValueTask<bool> TryGetAsync(string key, IBufferWriter<byte> destination, CancellationToken token = default)
 	{
-		BufferMethodsUsed = true;
+		BufferGetCalled = true;
 		var data = await _innerCache.GetAsync(key, token).ConfigureAwait(false);
 		if (data != null)
 		{
@@ -68,13 +75,13 @@ internal class MockBufferDistributedCache : IBufferDistributedCache
 
 	public void Set(string key, ReadOnlySequence<byte> value, DistributedCacheEntryOptions options)
 	{
-		BufferMethodsUsed = true;
+		BufferSetCalled = true;
 		_innerCache.Set(key, value.ToArray(), options);
 	}
 
 	public async ValueTask SetAsync(string key, ReadOnlySequence<byte> value, DistributedCacheEntryOptions options, CancellationToken token = default)
 	{
-		BufferMethodsUsed = true;
+		BufferSetCalled = true;
 		await _innerCache.SetAsync(key, value.ToArray(), options, token).ConfigureAwait(false);
 	}
 }

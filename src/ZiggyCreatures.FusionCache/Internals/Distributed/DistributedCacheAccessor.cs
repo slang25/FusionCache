@@ -20,6 +20,7 @@ internal sealed partial class DistributedCacheAccessor
 	private readonly string _wireFormatToken;
 #if NET9_0_OR_GREATER
 	private readonly bool _supportsBuffers;
+	private readonly bool _serializerSupportsBuffers;
 #endif
 
 	public DistributedCacheAccessor(IDistributedCache distributedCache, IFusionCacheSerializer serializer, FusionCacheOptions options, ILogger? logger, FusionCacheDistributedEventsHub events)
@@ -44,6 +45,7 @@ internal sealed partial class DistributedCacheAccessor
 #if NET9_0_OR_GREATER
 		// BUFFER SUPPORT DETECTION
 		_supportsBuffers = distributedCache is IBufferDistributedCache;
+		_serializerSupportsBuffers = serializer is IBufferFusionCacheSerializer;
 #endif
 
 		// WIRE FORMAT SETUP

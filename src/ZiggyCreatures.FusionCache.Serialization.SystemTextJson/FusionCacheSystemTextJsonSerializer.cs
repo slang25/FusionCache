@@ -1,4 +1,8 @@
 ﻿using System.Text.Json;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+using ZiggyCreatures.Caching.Fusion.Serialization;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Serialization.SystemTextJson;
 
@@ -7,6 +11,9 @@ namespace ZiggyCreatures.Caching.Fusion.Serialization.SystemTextJson;
 /// </summary>
 public class FusionCacheSystemTextJsonSerializer
 	: IFusionCacheSerializer
+#if NET9_0_OR_GREATER
+	, IBufferFusionCacheSerializer
+#endif
 {
 	/// <summary>
 	/// The options class for the <see cref="FusionCacheSystemTextJsonSerializer"/> class.
@@ -65,4 +72,22 @@ public class FusionCacheSystemTextJsonSerializer
 
 	/// <inheritdoc />
 	public override string ToString() => GetType().Name;
+
+#if NET9_0_OR_GREATER
+	/// <inheritdoc />
+	public void Serialize<T>(T? obj, IBufferWriter<byte> bufferWriter)
+	{
+		using var writer = new Utf8JsonWriter(bufferWriter);
+		JsonSerializer.Serialize<T?>(writer, obj, _serializerOptions);
+	}
+
+	/// <inheritdoc />
+	public ValueTask SerializeAsync<T>(T? obj, IBufferWriter<byte> bufferWriter, CancellationToken token = default)
+	{
+		// System.Text.Json doesn't have native async buffer writing for non-stream scenarios,
+		// so we use the synchronous version
+		Serialize(obj, bufferWriter);
+		return ValueTask.CompletedTask;
+	}
+#endif
 }

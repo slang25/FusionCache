@@ -20,6 +20,11 @@ public sealed class ArrayPoolBufferWriter : IBufferWriter<byte>, IDisposable
 	public int BytesWritten => _bytesWritten;
 
 	/// <summary>
+	/// Gets the number of bytes written to the buffer.
+	/// </summary>
+	public int WrittenCount => _bytesWritten;
+
+	/// <summary>
 	/// Gets the size of the buffer.
 	/// </summary>
 	public int BufferSize => _buffer.Length;
@@ -85,6 +90,16 @@ public sealed class ArrayPoolBufferWriter : IBufferWriter<byte>, IDisposable
 		var resultSpan = result.AsSpan();
 		Unsafe.CopyBlockUnaligned(ref MemoryMarshal.GetReference(resultSpan), ref MemoryMarshal.GetReference(bufferSpan), (uint)_bytesWritten);
 		return result;
+	}
+
+	/// <summary>
+	/// Returns the written data as a <see cref="ReadOnlySequence{T}"/>.
+	/// </summary>
+	/// <returns>The written data as a read-only sequence.</returns>
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public ReadOnlySequence<byte> ToReadOnlySequence()
+	{
+		return new ReadOnlySequence<byte>(_buffer, 0, _bytesWritten);
 	}
 
 	/// <inheritdoc/>
