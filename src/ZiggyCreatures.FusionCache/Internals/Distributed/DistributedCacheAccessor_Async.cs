@@ -4,6 +4,7 @@ using ZiggyCreatures.Caching.Fusion.Internals.Diagnostics;
 #if NET9_0_OR_GREATER
 using System.Buffers;
 using Microsoft.Extensions.Caching.Distributed;
+using ZiggyCreatures.Caching.Fusion.Serialization;
 #endif
 
 namespace ZiggyCreatures.Caching.Fusion.Internals.Distributed;
