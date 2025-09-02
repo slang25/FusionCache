@@ -4,7 +4,11 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
+using ZiggyCreatures.Caching.Fusion;
+using ZiggyCreatures.Caching.Fusion.NullObjects;
+using ZiggyCreatures.Caching.Fusion.Internals;
 using ZiggyCreatures.Caching.Fusion.Serialization;
 using ZiggyCreatures.FusionCache.Tests.Stuff;
 #if NET9_0_OR_GREATER
@@ -70,12 +74,12 @@ public class BufferSerializationTests
 		services.AddSingleton<IFusionCacheSerializer>(serializer);
 
 		using var serviceProvider = services.BuildServiceProvider();
-		using var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<FusionCache>();
+		var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<ZiggyCreatures.Caching.Fusion.FusionCache>();
 
-		var cache = new FusionCache(new FusionCacheOptions 
+		var cache = new ZiggyCreatures.Caching.Fusion.FusionCache(Options.Create(new ZiggyCreatures.Caching.Fusion.FusionCacheOptions 
 		{ 
-			DefaultEntryOptions = new FusionCacheEntryOptions()
-		}, logger);
+			DefaultEntryOptions = new ZiggyCreatures.Caching.Fusion.FusionCacheEntryOptions()
+		}), logger: logger);
 
 		cache.SetupDistributedCache(distributedCache, serializer);
 
@@ -84,7 +88,7 @@ public class BufferSerializationTests
 		var testValue = "buffer-test-value";
 		
 		cache.Set(testKey, testValue);
-		var retrievedValue = cache.Get<string>(testKey);
+		var retrievedValue = cache.GetOrDefault<string>(testKey);
 
 		// Assert
 		Assert.Equal(testValue, retrievedValue);
@@ -109,12 +113,12 @@ public class BufferSerializationTests
 		services.AddSingleton<IFusionCacheSerializer>(serializer);
 
 		using var serviceProvider = services.BuildServiceProvider();
-		using var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<FusionCache>();
+		var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<ZiggyCreatures.Caching.Fusion.FusionCache>();
 
-		var cache = new FusionCache(new FusionCacheOptions 
+		var cache = new ZiggyCreatures.Caching.Fusion.FusionCache(Options.Create(new ZiggyCreatures.Caching.Fusion.FusionCacheOptions 
 		{ 
-			DefaultEntryOptions = new FusionCacheEntryOptions()
-		}, logger);
+			DefaultEntryOptions = new ZiggyCreatures.Caching.Fusion.FusionCacheEntryOptions()
+		}), logger: logger);
 
 		cache.SetupDistributedCache(distributedCache, serializer);
 
@@ -123,7 +127,7 @@ public class BufferSerializationTests
 		var testValue = "async-buffer-test-value";
 		
 		await cache.SetAsync(testKey, testValue);
-		var retrievedValue = await cache.GetAsync<string>(testKey);
+		var retrievedValue = await cache.GetOrDefaultAsync<string>(testKey);
 
 		// Assert
 		Assert.Equal(testValue, retrievedValue);
@@ -137,7 +141,7 @@ public class BufferSerializationTests
 	public void NullSerializer_ShouldImplementBufferInterface()
 	{
 		// Arrange
-		var serializer = new NullObjects.NullSerializer();
+		var serializer = new ZiggyCreatures.Caching.Fusion.NullObjects.NullSerializer();
 
 		// Act & Assert - Just verify it implements the interface without throwing
 		Assert.IsAssignableFrom<IBufferFusionCacheSerializer>(serializer);
@@ -153,7 +157,7 @@ public class BufferSerializationTests
 	public async Task NullSerializer_Async_ShouldImplementBufferInterface()
 	{
 		// Arrange
-		var serializer = new NullObjects.NullSerializer();
+		var serializer = new ZiggyCreatures.Caching.Fusion.NullObjects.NullSerializer();
 
 		// Act & Assert - Just verify it implements the interface without throwing
 		Assert.IsAssignableFrom<IBufferFusionCacheSerializer>(serializer);
@@ -250,7 +254,7 @@ public class BufferSerializationTests
 	public void NullSerializer_ReadOnlySequence_ShouldImplementNewMethods()
 	{
 		// Arrange
-		var serializer = new NullObjects.NullSerializer();
+		var serializer = new ZiggyCreatures.Caching.Fusion.NullObjects.NullSerializer();
 		var data = new ReadOnlySequence<byte>(new byte[] { 1, 2, 3 });
 
 		// Act & Assert - Just verify it implements the new methods without throwing
@@ -262,7 +266,7 @@ public class BufferSerializationTests
 	public async Task NullSerializer_ReadOnlySequence_Async_ShouldImplementNewMethods()
 	{
 		// Arrange
-		var serializer = new NullObjects.NullSerializer();
+		var serializer = new ZiggyCreatures.Caching.Fusion.NullObjects.NullSerializer();
 		var data = new ReadOnlySequence<byte>(new byte[] { 1, 2, 3 });
 
 		// Act & Assert - Just verify it implements the new async methods without throwing
@@ -281,15 +285,15 @@ public class BufferSerializationTests
 		services.AddSingleton<IMemoryCache, MemoryCache>();
 
 		using var serviceProvider = services.BuildServiceProvider();
-		using var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<FusionCache>();
+		var logger = serviceProvider.GetService<ILoggerFactory>()?.CreateLogger<ZiggyCreatures.Caching.Fusion.FusionCache>();
 
-		var cache = new FusionCache(new FusionCacheOptions 
+		var cache = new ZiggyCreatures.Caching.Fusion.FusionCache(Options.Create(new ZiggyCreatures.Caching.Fusion.FusionCacheOptions 
 		{ 
-			DefaultEntryOptions = new FusionCacheEntryOptions()
-		}, logger);
+			DefaultEntryOptions = new ZiggyCreatures.Caching.Fusion.FusionCacheEntryOptions()
+		}), logger: logger);
 
 		// Use a traditional serializer (not implementing IBufferFusionCacheSerializer)
-		var traditionalSerializer = new NullObjects.NullSerializer();
+		var traditionalSerializer = new ZiggyCreatures.Caching.Fusion.NullObjects.NullSerializer();
 		var distributedCache = serviceProvider.GetRequiredService<IDistributedCache>();
 		
 		cache.SetupDistributedCache(distributedCache, traditionalSerializer);
@@ -299,7 +303,7 @@ public class BufferSerializationTests
 		var testValue = "traditional-test-value";
 		
 		cache.Set(testKey, testValue);
-		var retrievedValue = cache.Get<string>(testKey);
+		var retrievedValue = cache.GetOrDefault<string>(testKey);
 
 		// With NullSerializer, we expect null/default values, which is expected behavior
 		Assert.Equal(default(string), retrievedValue);

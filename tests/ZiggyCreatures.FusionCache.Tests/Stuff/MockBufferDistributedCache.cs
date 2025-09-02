@@ -1,6 +1,7 @@
 using System.Buffers;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace ZiggyCreatures.FusionCache.Tests.Stuff;
 
@@ -15,10 +16,15 @@ internal class MockBufferDistributedCache : IBufferDistributedCache
 	
 	public bool BufferSetCalled { get; private set; }
 	public bool BufferGetCalled { get; private set; }
+	
+	/// <summary>
+	/// Returns true if any buffer methods (TryGet or Set) were called.
+	/// </summary>
+	public bool BufferMethodsUsed => BufferSetCalled || BufferGetCalled;
 
 	public MockBufferDistributedCache()
 	{
-		_innerCache = new MemoryDistributedCache(new MemoryCache(new MemoryCacheOptions()));
+		_innerCache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 	}
 
 	public MockBufferDistributedCache(IDistributedCache innerCache)

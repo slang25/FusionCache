@@ -7,6 +7,7 @@ using ZiggyCreatures.Caching.Fusion.Serialization;
 #if NET9_0_OR_GREATER
 using Microsoft.Extensions.Caching.Distributed;
 using ZiggyCreatures.Caching.Fusion;
+using ZiggyCreatures.FusionCache.Tests.Stuff;
 #endif
 
 namespace FusionCacheTests;
