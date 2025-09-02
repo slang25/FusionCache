@@ -50,5 +50,17 @@ public class NullSerializer
 	{
 		return ValueTask.CompletedTask;
 	}
+
+	/// <inheritdoc/>
+	public T? Deserialize<T>(ReadOnlySequence<byte> data)
+	{
+		return default;
+	}
+
+	/// <inheritdoc/>
+	public ValueTask<T?> DeserializeAsync<T>(ReadOnlySequence<byte> data, CancellationToken token = default)
+	{
+		return new ValueTask<T?>(default(T?));
+	}
 #endif
 }

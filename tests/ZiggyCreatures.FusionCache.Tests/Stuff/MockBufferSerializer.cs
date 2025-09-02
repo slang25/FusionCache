@@ -57,6 +57,34 @@ public class MockBufferSerializer : IBufferFusionCacheSerializer
 	}
 
 	/// <inheritdoc/>
+	public T? Deserialize<T>(ReadOnlySequence<byte> data)
+	{
+		// Convert ReadOnlySequence to string, then try to convert to T
+		string str;
+		if (data.IsSingleSegment)
+		{
+			str = System.Text.Encoding.UTF8.GetString(data.FirstSpan);
+		}
+		else
+		{
+			var buffer = data.ToArray();
+			str = System.Text.Encoding.UTF8.GetString(buffer);
+		}
+		
+		if (typeof(T) == typeof(string))
+		{
+			return (T?)(object?)str;
+		}
+		return default(T);
+	}
+
+	/// <inheritdoc/>
+	public ValueTask<T?> DeserializeAsync<T>(ReadOnlySequence<byte> data, CancellationToken token = default)
+	{
+		return new ValueTask<T?>(Deserialize<T>(data));
+	}
+
+	/// <inheritdoc/>
 	public override string ToString() => GetType().Name;
 }
 #endif

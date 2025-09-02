@@ -89,5 +89,30 @@ public class FusionCacheSystemTextJsonSerializer
 		Serialize(obj, bufferWriter);
 		return ValueTask.CompletedTask;
 	}
+
+	/// <inheritdoc />
+	public T? Deserialize<T>(ReadOnlySequence<byte> data)
+	{
+		// Convert ReadOnlySequence to ReadOnlySpan for efficient JSON deserialization
+		if (data.IsSingleSegment)
+		{
+			return JsonSerializer.Deserialize<T>(data.FirstSpan, _serializerOptions);
+		}
+		else
+		{
+			// For multi-segment sequences, we need to copy to a byte array
+			// This is still more efficient than the caller having to do the conversion
+			var buffer = data.ToArray();
+			return JsonSerializer.Deserialize<T>(buffer, _serializerOptions);
+		}
+	}
+
+	/// <inheritdoc />
+	public ValueTask<T?> DeserializeAsync<T>(ReadOnlySequence<byte> data, CancellationToken token = default)
+	{
+		// System.Text.Json doesn't have native async buffer reading for non-stream scenarios,
+		// so we use the synchronous version
+		return new ValueTask<T?>(Deserialize<T>(data));
+	}
 #endif
 }

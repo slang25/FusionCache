@@ -164,6 +164,111 @@ public class BufferSerializationTests
 		// NullSerializer should not write anything
 		Assert.Equal(0, bufferWriter.WrittenCount);
 	}
+
+	[Fact]
+	public void BufferSerializer_ReadOnlySequence_Deserialize_ShouldWork()
+	{
+		// Arrange
+		var serializer = new MockBufferSerializer();
+		var testValue = "test-readonly-sequence-deserialization";
+
+		// Act - Serialize first to get data
+		var data = serializer.Serialize(testValue);
+		var sequence = new ReadOnlySequence<byte>(data);
+		
+		// Test ReadOnlySequence deserialization
+		var deserializedValue = serializer.Deserialize<string>(sequence);
+
+		// Assert
+		Assert.Equal(testValue, deserializedValue);
+	}
+
+	[Fact]
+	public async Task BufferSerializer_ReadOnlySequence_DeserializeAsync_ShouldWork()
+	{
+		// Arrange
+		var serializer = new MockBufferSerializer();
+		var testValue = "test-async-readonly-sequence-deserialization";
+
+		// Act - Serialize first to get data
+		var data = await serializer.SerializeAsync(testValue);
+		var sequence = new ReadOnlySequence<byte>(data);
+		
+		// Test async ReadOnlySequence deserialization
+		var deserializedValue = await serializer.DeserializeAsync<string>(sequence);
+
+		// Assert
+		Assert.Equal(testValue, deserializedValue);
+	}
+
+	[Fact]
+	public void BufferSerializer_MultiSegmentSequence_Deserialize_ShouldWork()
+	{
+		// Arrange
+		var serializer = new MockBufferSerializer();
+		var testValue = "test-multi-segment-sequence";
+
+		// Create a multi-segment ReadOnlySequence to test the non-single-segment path
+		var data1 = serializer.Serialize("test-multi-");
+		var data2 = serializer.Serialize("segment-sequence");
+		
+		var segment1 = new ReadOnlyMemory<byte>(data1);
+		var segment2 = new ReadOnlyMemory<byte>(data2);
+		
+		// Create a multi-segment sequence
+		var sequenceSegment1 = new TestSequenceSegment(segment1);
+		var sequenceSegment2 = sequenceSegment1.Append(segment2);
+		var sequence = new ReadOnlySequence<byte>(sequenceSegment1, 0, sequenceSegment2, sequenceSegment2.Memory.Length);
+		
+		// Act - Test multi-segment deserialization
+		var deserializedValue = serializer.Deserialize<string>(sequence);
+
+		// Assert - Should still work by converting to array internally
+		Assert.NotNull(deserializedValue);
+	}
+
+	// Helper class for creating multi-segment ReadOnlySequence
+	private class TestSequenceSegment : ReadOnlySequenceSegment<byte>
+	{
+		public TestSequenceSegment(ReadOnlyMemory<byte> memory)
+		{
+			Memory = memory;
+		}
+
+		public TestSequenceSegment Append(ReadOnlyMemory<byte> memory)
+		{
+			var segment = new TestSequenceSegment(memory)
+			{
+				RunningIndex = RunningIndex + Memory.Length
+			};
+			Next = segment;
+			return segment;
+		}
+	}
+
+	[Fact]
+	public void NullSerializer_ReadOnlySequence_ShouldImplementNewMethods()
+	{
+		// Arrange
+		var serializer = new NullObjects.NullSerializer();
+		var data = new ReadOnlySequence<byte>(new byte[] { 1, 2, 3 });
+
+		// Act & Assert - Just verify it implements the new methods without throwing
+		var result = serializer.Deserialize<string>(data);
+		Assert.Equal(default(string), result);
+	}
+
+	[Fact]
+	public async Task NullSerializer_ReadOnlySequence_Async_ShouldImplementNewMethods()
+	{
+		// Arrange
+		var serializer = new NullObjects.NullSerializer();
+		var data = new ReadOnlySequence<byte>(new byte[] { 1, 2, 3 });
+
+		// Act & Assert - Just verify it implements the new async methods without throwing
+		var result = await serializer.DeserializeAsync<string>(data);
+		Assert.Equal(default(string), result);
+	}
 #endif
 
 	[Fact]

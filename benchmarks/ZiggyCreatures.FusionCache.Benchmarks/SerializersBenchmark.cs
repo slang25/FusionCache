@@ -15,6 +15,10 @@ using ZiggyCreatures.Caching.Fusion.Serialization.NewtonsoftJson;
 using ZiggyCreatures.Caching.Fusion.Serialization.ProtoBufNet;
 using ZiggyCreatures.Caching.Fusion.Serialization.ServiceStackJson;
 using ZiggyCreatures.Caching.Fusion.Serialization.SystemTextJson;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+using ZiggyCreatures.Caching.Fusion.Internals;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Benchmarks;
 
@@ -74,6 +78,9 @@ public class SerializersBenchmark
 	public IFusionCacheSerializer Serializer = null!;
 	protected List<SampleModel> _Models = [];
 	protected byte[] _Blob = null!;
+#if NET9_0_OR_GREATER
+	protected ReadOnlySequence<byte> _BufferBlob;
+#endif
 
 	[GlobalSetup]
 	public void Setup()
@@ -84,6 +91,9 @@ public class SerializersBenchmark
 		}
 
 		_Blob = Serializer.Serialize(_Models);
+#if NET9_0_OR_GREATER
+		_BufferBlob = new ReadOnlySequence<byte>(_Blob);
+#endif
 	}
 
 	[Benchmark]
@@ -109,6 +119,66 @@ public class SerializersBenchmark
 	{
 		await Serializer.DeserializeAsync<List<SampleModel>>(_Blob).ConfigureAwait(false);
 	}
+
+#if NET9_0_OR_GREATER
+	[Benchmark]
+	public void SerializeBuffer()
+	{
+		if (Serializer is IBufferFusionCacheSerializer bufferSerializer)
+		{
+			using var bufferWriter = new ArrayPoolBufferWriter();
+			bufferSerializer.Serialize(_Models, bufferWriter);
+		}
+		else
+		{
+			// Fallback to traditional serialization for fair comparison
+			Serializer.Serialize(_Models);
+		}
+	}
+
+	[Benchmark]
+	public void DeserializeBuffer()
+	{
+		if (Serializer is IBufferFusionCacheSerializer bufferSerializer)
+		{
+			bufferSerializer.Deserialize<List<SampleModel>>(_BufferBlob);
+		}
+		else
+		{
+			// Fallback to traditional deserialization for fair comparison
+			Serializer.Deserialize<List<SampleModel>>(_Blob);
+		}
+	}
+
+	[Benchmark]
+	public async Task SerializeBufferAsync()
+	{
+		if (Serializer is IBufferFusionCacheSerializer bufferSerializer)
+		{
+			using var bufferWriter = new ArrayPoolBufferWriter();
+			await bufferSerializer.SerializeAsync(_Models, bufferWriter).ConfigureAwait(false);
+		}
+		else
+		{
+			// Fallback to traditional serialization for fair comparison
+			await Serializer.SerializeAsync(_Models).ConfigureAwait(false);
+		}
+	}
+
+	[Benchmark]
+	public async Task DeserializeBufferAsync()
+	{
+		if (Serializer is IBufferFusionCacheSerializer bufferSerializer)
+		{
+			await bufferSerializer.DeserializeAsync<List<SampleModel>>(_BufferBlob).ConfigureAwait(false);
+		}
+		else
+		{
+			// Fallback to traditional deserialization for fair comparison
+			await Serializer.DeserializeAsync<List<SampleModel>>(_Blob).ConfigureAwait(false);
+		}
+	}
+#endif
 
 	public static IEnumerable<IFusionCacheSerializer> GetSerializers()
 	{
