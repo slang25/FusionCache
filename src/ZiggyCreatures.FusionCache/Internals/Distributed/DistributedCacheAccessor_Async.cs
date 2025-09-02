@@ -1,6 +1,11 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ZiggyCreatures.Caching.Fusion.Internals.Diagnostics;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+using Microsoft.Extensions.Caching.Distributed;
+using ZiggyCreatures.Caching.Fusion.Serialization;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Internals.Distributed;
 
@@ -70,23 +75,48 @@ internal partial class DistributedCacheAccessor
 		var distributedEntry = entry.AsDistributedEntry<TValue>(options);
 
 		// SERIALIZATION
-		byte[]? data;
+		byte[]? data = null;
+#if NET9_0_OR_GREATER
+		ArrayPoolBufferWriter? bufferWriter = null;
+#endif
 		try
 		{
 			if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
 				_logger.Log(LogLevel.Trace, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): [DC] serializing the entry {Entry}", _options.CacheName, _options.InstanceId, operationId, key, distributedEntry.ToLogString(_options.IncludeTagsInLogs));
 
-			if (_options.PreferSyncSerialization)
+#if NET9_0_OR_GREATER
+			if (_serializerSupportsBuffers && _serializer is IBufferFusionCacheSerializer bufferSerializer)
 			{
-				data = _serializer.Serialize(distributedEntry);
+				// Use buffer-optimized serialization
+				bufferWriter = new ArrayPoolBufferWriter();
+				if (_options.PreferSyncSerialization)
+				{
+					bufferSerializer.Serialize(distributedEntry, bufferWriter);
+				}
+				else
+				{
+					await bufferSerializer.SerializeAsync(distributedEntry, bufferWriter, token).ConfigureAwait(false);
+				}
 			}
 			else
+#endif
 			{
-				data = await _serializer.SerializeAsync(distributedEntry, token).ConfigureAwait(false);
+				// Use traditional byte[] serialization
+				if (_options.PreferSyncSerialization)
+				{
+					data = _serializer.Serialize(distributedEntry);
+				}
+				else
+				{
+					data = await _serializer.SerializeAsync(distributedEntry, token).ConfigureAwait(false);
+				}
 			}
 		}
 		catch (Exception exc)
 		{
+#if NET9_0_OR_GREATER
+			bufferWriter?.Dispose();
+#endif
 			if (_logger?.IsEnabled(_options.SerializationErrorsLogLevel) ?? false)
 				_logger.Log(_options.SerializationErrorsLogLevel, exc, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): [DC] an error occurred while serializing an entry {Entry}", _options.CacheName, _options.InstanceId, operationId, key, distributedEntry.ToLogString(_options.IncludeTagsInLogs));
 
@@ -112,7 +142,22 @@ internal partial class DistributedCacheAccessor
 			//data = null;
 		}
 
-		if (data is null)
+#if NET9_0_OR_GREATER
+		if (bufferWriter is not null && bufferWriter.WrittenCount == 0)
+		{
+			bufferWriter.Dispose();
+			if (_logger?.IsEnabled(_options.SerializationErrorsLogLevel) ?? false)
+				_logger.Log(_options.SerializationErrorsLogLevel, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): [DC] the entry {Entry} has been serialized to empty buffer, skipping", _options.CacheName, _options.InstanceId, operationId, key, distributedEntry.ToLogString(_options.IncludeTagsInLogs));
+
+			return false;
+		}
+#endif
+
+		if (data is null
+#if NET9_0_OR_GREATER
+		    && bufferWriter is null
+#endif
+		   )
 		{
 			if (_logger?.IsEnabled(_options.SerializationErrorsLogLevel) ?? false)
 				_logger.Log(_options.SerializationErrorsLogLevel, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): [DC] the entry {Entry} has been serialized to null, skipping", _options.CacheName, _options.InstanceId, operationId, key, distributedEntry.ToLogString(_options.IncludeTagsInLogs));
@@ -128,7 +173,38 @@ internal partial class DistributedCacheAccessor
 			{
 				var distributedOptions = options.ToDistributedCacheEntryOptions(_options, _logger, operationId, key);
 
-				await _cache.SetAsync(MaybeProcessCacheKey(key), data, distributedOptions, ct).ConfigureAwait(false);
+#if NET9_0_OR_GREATER
+				if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+				{
+					// Use buffer-optimized distributed cache
+					if (bufferWriter is not null)
+					{
+						// Both serializer and cache support buffers - most efficient path
+						var sequence = bufferWriter.ToReadOnlySequence();
+						await bufferCache.SetAsync(MaybeProcessCacheKey(key), sequence, distributedOptions, ct).ConfigureAwait(false);
+						bufferWriter.Dispose();
+					}
+					else
+					{
+						// Only cache supports buffers - convert byte[] to ReadOnlySequence
+						var sequence = new ReadOnlySequence<byte>(data!);
+						await bufferCache.SetAsync(MaybeProcessCacheKey(key), sequence, distributedOptions, ct).ConfigureAwait(false);
+					}
+				}
+				else
+#endif
+				{
+					// Use traditional byte[] path
+#if NET9_0_OR_GREATER
+					if (bufferWriter is not null)
+					{
+						// Serializer supports buffers but cache doesn't - convert to byte[]
+						data = bufferWriter.ToArray();
+						bufferWriter.Dispose();
+					}
+#endif
+					await _cache.SetAsync(MaybeProcessCacheKey(key), data!, distributedOptions, ct).ConfigureAwait(false);
+				}
 
 				// EVENT
 				_events.OnSet(operationId, key);
@@ -158,12 +234,37 @@ internal partial class DistributedCacheAccessor
 		try
 		{
 			timeout ??= options.GetAppropriateDistributedCacheTimeout(hasFallbackValue);
-			data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
-				async ct => await _cache.GetAsync(MaybeProcessCacheKey(key), ct).ConfigureAwait(false),
-				timeout.Value,
-				true,
-				token: token
-			).ConfigureAwait(false);
+			
+#if NET9_0_OR_GREATER
+			if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+			{
+				// Use buffer-optimized path
+				data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
+					async ct =>
+					{
+						using var bufferWriter = new ArrayPoolBufferWriter();
+						if (await bufferCache.TryGetAsync(MaybeProcessCacheKey(key), bufferWriter, ct).ConfigureAwait(false))
+						{
+							return bufferWriter.ToArray();
+						}
+						return null;
+					},
+					timeout.Value,
+					true,
+					token: token
+				).ConfigureAwait(false);
+			}
+			else
+#endif
+			{
+				// Use traditional byte[] path
+				data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
+					async ct => await _cache.GetAsync(MaybeProcessCacheKey(key), ct).ConfigureAwait(false),
+					timeout.Value,
+					true,
+					token: token
+				).ConfigureAwait(false);
+			}
 		}
 		catch (Exception exc)
 		{

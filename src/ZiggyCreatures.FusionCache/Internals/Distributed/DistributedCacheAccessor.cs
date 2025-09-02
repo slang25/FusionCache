@@ -3,6 +3,9 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using ZiggyCreatures.Caching.Fusion.Events;
 using ZiggyCreatures.Caching.Fusion.Serialization;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Internals.Distributed;
 
@@ -15,6 +18,10 @@ internal sealed partial class DistributedCacheAccessor
 	private readonly FusionCacheDistributedEventsHub _events;
 	private readonly SimpleCircuitBreaker _breaker;
 	private readonly string _wireFormatToken;
+#if NET9_0_OR_GREATER
+	private readonly bool _supportsBuffers;
+	private readonly bool _serializerSupportsBuffers;
+#endif
 
 	public DistributedCacheAccessor(IDistributedCache distributedCache, IFusionCacheSerializer serializer, FusionCacheOptions options, ILogger? logger, FusionCacheDistributedEventsHub events)
 	{
@@ -34,6 +41,12 @@ internal sealed partial class DistributedCacheAccessor
 
 		// CIRCUIT-BREAKER
 		_breaker = new SimpleCircuitBreaker(options.DistributedCacheCircuitBreakerDuration);
+
+#if NET9_0_OR_GREATER
+		// BUFFER SUPPORT DETECTION
+		_supportsBuffers = distributedCache is IBufferDistributedCache;
+		_serializerSupportsBuffers = serializer is IBufferFusionCacheSerializer;
+#endif
 
 		// WIRE FORMAT SETUP
 		_wireFormatToken = _options.DistributedCacheKeyModifierMode switch

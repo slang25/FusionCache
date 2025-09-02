@@ -4,6 +4,11 @@ using Xunit;
 using ZiggyCreatures.Caching.Fusion.Internals;
 using ZiggyCreatures.Caching.Fusion.Internals.Distributed;
 using ZiggyCreatures.Caching.Fusion.Serialization;
+#if NET9_0_OR_GREATER
+using Microsoft.Extensions.Caching.Distributed;
+using ZiggyCreatures.Caching.Fusion;
+using ZiggyCreatures.FusionCache.Tests.Stuff;
+#endif
 
 namespace FusionCacheTests;
 
@@ -156,4 +161,29 @@ public partial class SerializationTests
 
 		Assert.Equal(sourceData, targetEntry.Value);
 	}
+
+#if NET9_0_OR_GREATER
+	[Theory]
+	[ClassData(typeof(SerializerTypesClassData))]
+	public void BufferDistributedCacheIsUsedWhenAvailable(SerializerType serializerType)
+	{
+		using var fusionCache = new FusionCache(new FusionCacheOptions());
+		var serializer = TestsUtils.GetSerializer(serializerType);
+		var normalCache = new MemoryDistributedCache(Microsoft.Extensions.Options.Options.Create(new Microsoft.Extensions.Caching.Memory.MemoryDistributedCacheOptions()));
+		var bufferCache = new MockBufferDistributedCache(normalCache);
+
+		fusionCache.SetupDistributedCache(bufferCache, serializer);
+
+		var key = "test-buffer-key";
+		var value = SampleString;
+
+		// Act
+		fusionCache.Set(key, value);
+		var retrieved = fusionCache.GetOrDefault<string>(key);
+
+		// Assert
+		Assert.Equal(value, retrieved);
+		Assert.True(bufferCache.BufferMethodsUsed, "Buffer methods should have been used when IBufferDistributedCache is available");
+	}
+#endif
 }

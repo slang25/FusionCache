@@ -1,4 +1,7 @@
 ﻿using ZiggyCreatures.Caching.Fusion.Serialization;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.NullObjects;
 
@@ -7,6 +10,9 @@ namespace ZiggyCreatures.Caching.Fusion.NullObjects;
 /// </summary>
 public class NullSerializer
 	: IFusionCacheSerializer
+#if NET9_0_OR_GREATER
+	, IBufferFusionCacheSerializer
+#endif
 {
 	/// <inheritdoc/>
 	public byte[] Serialize<T>(T? obj)
@@ -31,4 +37,30 @@ public class NullSerializer
 	{
 		return new ValueTask<T?>(default(T?));
 	}
+
+#if NET9_0_OR_GREATER
+	/// <inheritdoc/>
+	public void Serialize<T>(T? obj, IBufferWriter<byte> bufferWriter)
+	{
+		// Do nothing
+	}
+
+	/// <inheritdoc/>
+	public ValueTask SerializeAsync<T>(T? obj, IBufferWriter<byte> bufferWriter, CancellationToken token = default)
+	{
+		return ValueTask.CompletedTask;
+	}
+
+	/// <inheritdoc/>
+	public T? Deserialize<T>(ReadOnlySequence<byte> data)
+	{
+		return default;
+	}
+
+	/// <inheritdoc/>
+	public ValueTask<T?> DeserializeAsync<T>(ReadOnlySequence<byte> data, CancellationToken token = default)
+	{
+		return new ValueTask<T?>(default(T?));
+	}
+#endif
 }
