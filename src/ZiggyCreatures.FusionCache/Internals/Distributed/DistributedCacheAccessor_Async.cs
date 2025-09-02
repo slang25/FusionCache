@@ -1,6 +1,10 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ZiggyCreatures.Caching.Fusion.Internals.Diagnostics;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+using Microsoft.Extensions.Caching.Distributed;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Internals.Distributed;
 
@@ -128,7 +132,19 @@ internal partial class DistributedCacheAccessor
 			{
 				var distributedOptions = options.ToDistributedCacheEntryOptions(_options, _logger, operationId, key);
 
-				await _cache.SetAsync(MaybeProcessCacheKey(key), data, distributedOptions, ct).ConfigureAwait(false);
+#if NET9_0_OR_GREATER
+				if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+				{
+					// Use buffer-optimized path
+					var sequence = new ReadOnlySequence<byte>(data);
+					await bufferCache.SetAsync(MaybeProcessCacheKey(key), sequence, distributedOptions, ct).ConfigureAwait(false);
+				}
+				else
+#endif
+				{
+					// Use traditional byte[] path
+					await _cache.SetAsync(MaybeProcessCacheKey(key), data, distributedOptions, ct).ConfigureAwait(false);
+				}
 
 				// EVENT
 				_events.OnSet(operationId, key);
@@ -158,12 +174,37 @@ internal partial class DistributedCacheAccessor
 		try
 		{
 			timeout ??= options.GetAppropriateDistributedCacheTimeout(hasFallbackValue);
-			data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
-				async ct => await _cache.GetAsync(MaybeProcessCacheKey(key), ct).ConfigureAwait(false),
-				timeout.Value,
-				true,
-				token: token
-			).ConfigureAwait(false);
+			
+#if NET9_0_OR_GREATER
+			if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+			{
+				// Use buffer-optimized path
+				data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
+					async ct =>
+					{
+						using var bufferWriter = new ArrayPoolBufferWriter();
+						if (await bufferCache.TryGetAsync(MaybeProcessCacheKey(key), bufferWriter, ct).ConfigureAwait(false))
+						{
+							return bufferWriter.ToArray();
+						}
+						return null;
+					},
+					timeout.Value,
+					true,
+					token: token
+				).ConfigureAwait(false);
+			}
+			else
+#endif
+			{
+				// Use traditional byte[] path
+				data = await RunUtils.RunAsyncFuncWithTimeoutAsync<byte[]?>(
+					async ct => await _cache.GetAsync(MaybeProcessCacheKey(key), ct).ConfigureAwait(false),
+					timeout.Value,
+					true,
+					token: token
+				).ConfigureAwait(false);
+			}
 		}
 		catch (Exception exc)
 		{

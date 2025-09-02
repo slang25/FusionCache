@@ -1,6 +1,10 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ZiggyCreatures.Caching.Fusion.Internals.Diagnostics;
+#if NET9_0_OR_GREATER
+using System.Buffers;
+using Microsoft.Extensions.Caching.Distributed;
+#endif
 
 namespace ZiggyCreatures.Caching.Fusion.Internals.Distributed;
 
@@ -121,7 +125,19 @@ internal partial class DistributedCacheAccessor
 			{
 				var distributedOptions = options.ToDistributedCacheEntryOptions(_options, _logger, operationId, key);
 
-				_cache.Set(MaybeProcessCacheKey(key), data, distributedOptions);
+#if NET9_0_OR_GREATER
+				if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+				{
+					// Use buffer-optimized path
+					var sequence = new ReadOnlySequence<byte>(data);
+					bufferCache.Set(MaybeProcessCacheKey(key), sequence, distributedOptions);
+				}
+				else
+#endif
+				{
+					// Use traditional byte[] path
+					_cache.Set(MaybeProcessCacheKey(key), data, distributedOptions);
+				}
 
 				// EVENT
 				_events.OnSet(operationId, key);
@@ -151,12 +167,37 @@ internal partial class DistributedCacheAccessor
 		try
 		{
 			timeout ??= options.GetAppropriateDistributedCacheTimeout(hasFallbackValue);
-			data = RunUtils.RunSyncFuncWithTimeout<byte[]?>(
-				_ => _cache.Get(MaybeProcessCacheKey(key)),
-				timeout.Value,
-				true,
-				token: token
-			);
+			
+#if NET9_0_OR_GREATER
+			if (_supportsBuffers && _cache is IBufferDistributedCache bufferCache)
+			{
+				// Use buffer-optimized path
+				data = RunUtils.RunSyncFuncWithTimeout<byte[]?>(
+					_ =>
+					{
+						using var bufferWriter = new ArrayPoolBufferWriter();
+						if (bufferCache.TryGet(MaybeProcessCacheKey(key), bufferWriter))
+						{
+							return bufferWriter.ToArray();
+						}
+						return null;
+					},
+					timeout.Value,
+					true,
+					token: token
+				);
+			}
+			else
+#endif
+			{
+				// Use traditional byte[] path
+				data = RunUtils.RunSyncFuncWithTimeout<byte[]?>(
+					_ => _cache.Get(MaybeProcessCacheKey(key)),
+					timeout.Value,
+					true,
+					token: token
+				);
+			}
 		}
 		catch (Exception exc)
 		{
