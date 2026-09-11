@@ -80,7 +80,7 @@ public abstract class AbstractChaosComponent
 	public virtual void SetMaybeThrow(float probability)
 	{
 		if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
-			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetMaybeThrow", _className);
+			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetMaybeThrow {Probability}", _className, probability.ToString("0.##"));
 
 		// CLAMP
 		if (probability < 0.0f)
@@ -126,7 +126,7 @@ public abstract class AbstractChaosComponent
 	public virtual void SetAlwaysDelayExactly(TimeSpan delay)
 	{
 		if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
-			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysDelayExactly", _className);
+			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysDelayExactly {Delay}", _className, delay);
 
 		ChaosMinDelay = delay;
 		ChaosMaxDelay = delay;
@@ -140,7 +140,7 @@ public abstract class AbstractChaosComponent
 	public virtual void SetAlwaysDelay(TimeSpan minDelay, TimeSpan maxDelay)
 	{
 		if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
-			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetDelay", _className);
+			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetDelay {MinDelay} {MaxDelay}", _className, minDelay, maxDelay);
 
 		ChaosMinDelay = minDelay;
 		ChaosMaxDelay = maxDelay;
@@ -167,7 +167,7 @@ public abstract class AbstractChaosComponent
 	public virtual void SetAlwaysChaos(TimeSpan delay)
 	{
 		if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
-			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysChaos", _className);
+			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysChaos {Delay}", _className, delay);
 
 		SetAlwaysThrow();
 		SetAlwaysDelayExactly(delay);
@@ -181,7 +181,7 @@ public abstract class AbstractChaosComponent
 	public virtual void SetAlwaysChaos(TimeSpan minDelay, TimeSpan maxDelay)
 	{
 		if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
-			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysChaos", _className);
+			_logger.Log(LogLevel.Debug, "FUSION {ClassName}: SetAlwaysChaos {MinDelay} {MaxDelay}", _className, minDelay, maxDelay);
 
 		SetAlwaysThrow();
 		SetAlwaysDelay(minDelay, maxDelay);
