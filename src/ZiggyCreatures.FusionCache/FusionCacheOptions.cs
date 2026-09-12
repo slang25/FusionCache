@@ -69,10 +69,10 @@ public class FusionCacheOptions
 
 		_tagsDefaultEntryOptions = new FusionCacheEntryOptions
 		{
-			Duration = TimeSpan.FromHours(24 * 10),
-			DistributedCacheDuration = TimeSpan.FromHours(24 * 10),
+			Duration = TimeSpan.FromHours(1), // L1: 1 HOUR
+			DistributedCacheDuration = TimeSpan.FromHours(24), // L2: 24 HOURS
 			IsFailSafeEnabled = true,
-			FailSafeMaxDuration = TimeSpan.FromHours(24 * 10),
+			FailSafeMaxDuration = TimeSpan.FromHours(24 * 10), // FALLBACK: 10 DAYS
 			AllowBackgroundDistributedCacheOperations = false,
 			AllowBackgroundBackplaneOperations = false,
 			ReThrowDistributedCacheExceptions = false,
@@ -122,6 +122,10 @@ public class FusionCacheOptions
 		PluginsInfoLogLevel = LogLevel.Information;
 		PluginsErrorsLogLevel = LogLevel.Error;
 		MissingCacheKeyPrefixWarningLogLevel = LogLevel.Warning;
+#pragma warning disable CS0618 // Type or member is obsolete
+		SerializationIssuesLogLevel = LogLevel.Warning;
+#pragma warning restore CS0618 // Type or member is obsolete
+		SerializationConfigIssuesLogLevel = LogLevel.Warning;
 	}
 
 	/// <summary>
@@ -432,6 +436,15 @@ public class FusionCacheOptions
 	public bool PreferSyncSerialization { get; set; }
 
 	/// <summary>
+	/// The <see cref="System.Buffers.ArrayPool{T}"/> used for the pooled buffers of the buffered distributed cache path, used when both the distributed cache implements <see cref="Microsoft.Extensions.Caching.Distributed.IBufferDistributedCache"/> and the serializer implements <see cref="Serialization.IBufferFusionCacheSerializer"/>.
+	/// <br/><br/>
+	/// The default is <see cref="System.Buffers.ArrayPool{T}.Shared"/>, which supports buffers of any size and automatically releases unused ones under memory pressure.
+	/// <br/><br/>
+	/// An isolated pool (see <see cref="System.Buffers.ArrayPool{T}.Create(int, int)"/>) can be specified instead: in that case note that sizes above the pool's max array length will not be pooled (with a heavy allocations cost for large payloads), and that isolated pools never release the arrays they retain.
+	/// </summary>
+	public System.Buffers.ArrayPool<byte>? DistributedCacheBufferPool { get; set; }
+
+	/// <summary>
 	/// Include tags when logging a cache entry: since tags may contain sensitive data, be careful about enabling this.
 	/// <br/><br/>
 	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/Logging.md"/>
@@ -595,6 +608,26 @@ public class FusionCacheOptions
 	/// </summary>
 	public LogLevel MissingCacheKeyPrefixWarningLogLevel { get; set; }
 
+	/// <summary>
+	/// Specify the <see cref="LogLevel"/> to use when it looks like the serializer being used does not correctly deserialize value tuples, probably because of how fields (not properties) are being handled.
+	/// <br/><br/>
+	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/CacheLevels.md"/>
+	/// <br/><br/>
+	/// <strong>SEE:</strong> <see href="https://github.com/dotnet/runtime/issues/70352"/>
+	/// </summary>
+	[EditorBrowsable(EditorBrowsableState.Never)]
+	[Obsolete("Please use SerializationConfigIssuesLogLevel instead.")]
+	public LogLevel SerializationIssuesLogLevel { get; set; }
+
+	/// <summary>
+	/// Specify the <see cref="LogLevel"/> to use when it looks like the serializer being used does not correctly deserialize value tuples, probably because of how fields (not properties) are being handled.
+	/// <br/><br/>
+	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/CacheLevels.md"/>
+	/// <br/><br/>
+	/// <strong>SEE:</strong> <see href="https://github.com/dotnet/runtime/issues/70352"/>
+	/// </summary>
+	public LogLevel SerializationConfigIssuesLogLevel { get; set; }
+
 	FusionCacheOptions IOptions<FusionCacheOptions>.Value
 	{
 		get { return this; }
@@ -640,6 +673,8 @@ public class FusionCacheOptions
 
 			PreferSyncSerialization = PreferSyncSerialization,
 
+			DistributedCacheBufferPool = DistributedCacheBufferPool,
+
 			IncludeTagsInLogs = IncludeTagsInLogs,
 			IncludeTagsInTraces = IncludeTagsInTraces,
 			IncludeTagsInMetrics = IncludeTagsInMetrics,
@@ -673,6 +708,11 @@ public class FusionCacheOptions
 			PluginsInfoLogLevel = PluginsInfoLogLevel,
 
 			MissingCacheKeyPrefixWarningLogLevel = MissingCacheKeyPrefixWarningLogLevel,
+
+#pragma warning disable CS0618 // Type or member is obsolete
+			SerializationIssuesLogLevel = SerializationIssuesLogLevel,
+#pragma warning restore CS0618 // Type or member is obsolete
+			SerializationConfigIssuesLogLevel = SerializationConfigIssuesLogLevel,
 
 			EnableBestPracticesAdvisor = EnableBestPracticesAdvisor,
 		};
